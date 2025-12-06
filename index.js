@@ -24,8 +24,25 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    const loanLinkDB = client.db("loanLinkDB");
+    const loansCollection = loanLinkDB.collection("loans");
 
 
+    app.post("/loans", async (req, res) => {
+      const loan = req.body;
+      const result = await loansCollection.insertOne(loan);
+      res.send(result);
+    })
+    app.get("/available-loans", async (req, res) => {
+      const cursor = loansCollection.find({showOnHome: true}).limit(6).sort({createdAt: -1});
+      const result = await cursor.toArray();
+      res.send(result);
+    })
+    app.get("/loans", async (req, res) => {
+      const cursor = loansCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    })
 
     
     // Send a ping to confirm a successful connection
