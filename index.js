@@ -66,6 +66,12 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send({ role: result?.role || "borrower" });
+    });
 
     
     // Send a ping to confirm a successful connection
