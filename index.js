@@ -1,6 +1,6 @@
 const express = require('express')
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require("dotenv").config();
 const app = express()
 const port = process.env.PORT || 3000;
@@ -26,8 +26,10 @@ async function run() {
 
     const loanLinkDB = client.db("loanLinkDB");
     const loansCollection = loanLinkDB.collection("loans");
+    const usersCollection = loanLinkDB.collection("users");
 
 
+    // loans related apis
     app.post("/loans", async (req, res) => {
       const loan = req.body;
       const result = await loansCollection.insertOne(loan);
@@ -43,6 +45,27 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     })
+    app.get("/loans/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await loansCollection.findOne(query);
+      res.send(result);
+    })
+
+
+    // user related apis
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      user.createdAt = new Date();
+
+      const userExist = await usersCollection.findOne({ email: user.email });
+      if (userExist) {
+        return res.send({ message: "User Already Exist" });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
 
     
     // Send a ping to confirm a successful connection
