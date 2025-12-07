@@ -51,11 +51,20 @@ async function run() {
     const applicationsCollection = loanLinkDB.collection("applications");
 
     // middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user?.role !== "admin" || user?.status !== "approved") {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+      next();
+    };
     const verifyManager = async (req, res, next) => {
       const email = req.decoded_email;
       const query = { email };
       const user = await usersCollection.findOne(query);
-      if (!user || user?.role !== "manager") {
+      if (!user || user?.role !== "manager" || user?.status !== "approved") {
         return res.status(403).send({ message: "Forbidden Access" });
       }
       next();
@@ -64,8 +73,17 @@ async function run() {
       const email = req.decoded_email;
       const query = { email };
       const user = await usersCollection.findOne(query);
-      if (!user || user?.role !== "borrower") {
-        console.log("he is not a borrower", user?.role);
+      if (!user || user?.role !== "borrower" || user?.status !== "approved") {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+      next();
+    };
+    // Not Borrower
+    const verifyNotBorrower = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (user?.role === "borrower" || user?.status === "pending" || user?.status === "suspended") {
         return res.status(403).send({ message: "Forbidden Access" });
       }
       next();
@@ -97,11 +115,28 @@ async function run() {
       const result = await loansCollection.findOne(query);
       res.send(result);
     });
+    app.patch("/loans/:id/show-on-home", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
+      const updatedLoan = req.body;
+      const query = {_id : new ObjectId(req.params.id)};
+      const update = {
+        $set: {
+          showOnHome: updatedLoan.showOnHome
+        }
+      }
+      const result = await loansCollection.updateOne(query, update);
+      res.send(result);
+    })
+    app.delete("/loans/:id", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
+      const query = {_id : new ObjectId(req.params.id)};
+      const result = await loansCollection.deleteOne(query);
+      res.send(result);
+    })
 
     // user related apis
     app.post("/users", async (req, res) => {
       const user = req.body;
       user.createdAt = new Date();
+      user.status = "pending";
 
       const userExist = await usersCollection.findOne({ email: user.email });
       if (userExist) {
@@ -115,8 +150,26 @@ async function run() {
       const email = req.params.email;
       const query = { email: email };
       const result = await usersCollection.findOne(query);
-      res.send({ role: result?.role || "borrower" });
+      res.send(result);
     });
+    app.get("/users", async (req, res) => {
+      const cursor = usersCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    })
+    app.patch("/users/:id", verifyFirebaseToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const updatedUser = req.body;
+      const query = {_id: new ObjectId(id)};
+      const update = {
+        $set: {
+          role : updatedUser.role,
+          status: updatedUser.status
+        }
+      }
+      const result = await usersCollection.updateOne(query, update);
+      res.send(result);
+    })
 
 
     // applications related apis
@@ -125,7 +178,7 @@ async function run() {
       application.createdAt = new Date();
       const result = await applicationsCollection.insertOne(application);
       res.send(result);
-    } )
+    })
 
 
 
