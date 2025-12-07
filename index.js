@@ -1,13 +1,34 @@
-const express = require('express')
+const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
-const app = express()
+const app = express();
 const port = process.env.PORT || 3000;
+
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./loanlink-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+const verifyFirebaseToken = async (req, res, next) => {
+  if (!req.headers.authorization) {
+    return res.status(401).send({ message: "Unauthorized Access" });
+  }
+  const token = req.headers.authorization.split(" ")[1];
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.decoded_email = decoded.email;
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "Unauthorized Access" });
+  }
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.z1gnsog.mongodb.net/?appName=Cluster0`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -16,7 +37,7 @@ const client = new MongoClient(uri, {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
 
 async function run() {
@@ -27,31 +48,55 @@ async function run() {
     const loanLinkDB = client.db("loanLinkDB");
     const loansCollection = loanLinkDB.collection("loans");
     const usersCollection = loanLinkDB.collection("users");
+    const applicationsCollection = loanLinkDB.collection("applications");
 
+    // middleware
+    const verifyManager = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user?.role !== "manager") {
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+      next();
+    };
+    const verifyBorrower = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user?.role !== "borrower") {
+        console.log("he is not a borrower", user?.role);
+        return res.status(403).send({ message: "Forbidden Access" });
+      }
+      next();
+    };
 
     // loans related apis
-    app.post("/loans", async (req, res) => {
+    app.post("/loans", verifyFirebaseToken, verifyManager, async (req, res) => {
       const loan = req.body;
+      loan.createdAt = new Date();
       const result = await loansCollection.insertOne(loan);
       res.send(result);
-    })
+    });
     app.get("/available-loans", async (req, res) => {
-      const cursor = loansCollection.find({showOnHome: true}).limit(6).sort({createdAt: -1});
+      const cursor = loansCollection
+        .find({ showOnHome: true })
+        .limit(6)
+        .sort({ createdAt: -1 });
       const result = await cursor.toArray();
       res.send(result);
-    })
+    });
     app.get("/loans", async (req, res) => {
       const cursor = loansCollection.find();
       const result = await cursor.toArray();
       res.send(result);
-    })
-    app.get("/loans/:id", async (req, res) => {
+    });
+    app.get("/loans/:id", verifyFirebaseToken, async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await loansCollection.findOne(query);
       res.send(result);
-    })
-
+    });
 
     // user related apis
     app.post("/users", async (req, res) => {
@@ -66,17 +111,29 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
-    app.get("/users/:email/role", async (req, res) => {
+    app.get("/users/:email/role",verifyFirebaseToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const result = await usersCollection.findOne(query);
       res.send({ role: result?.role || "borrower" });
     });
 
-    
+
+    // applications related apis
+    app.post("/loan-applications", verifyFirebaseToken, verifyBorrower, async (req, res) => {
+      const application = req.body;
+      application.createdAt = new Date();
+      const result = await applicationsCollection.insertOne(application);
+      res.send(result);
+    } )
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -84,11 +141,10 @@ async function run() {
 }
 run().catch(console.dir);
 
-
-app.get('/', (req, res) => {
-  res.send('LoanLink is running')
-})
+app.get("/", (req, res) => {
+  res.send("LoanLink is running");
+});
 
 app.listen(port, () => {
-  console.log(`LoanLink is running on port ${port}`)
-})
+  console.log(`LoanLink is running on port ${port}`);
+});
