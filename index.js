@@ -105,7 +105,7 @@ async function run() {
       res.send(result);
     });
     app.get("/loans", async (req, res) => {
-      const cursor = loansCollection.find();
+      const cursor = loansCollection.find().sort({createdAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -194,6 +194,16 @@ async function run() {
       const application = req.body;
       application.createdAt = new Date();
       const result = await applicationsCollection.insertOne(application);
+      res.send(result);
+    })
+    app.get("/loan-applications", verifyFirebaseToken, async (req, res) => {
+      const {status} = req.query;
+      const query = {};
+      if(status){
+        query.status = status;
+      }
+      const cursor = applicationsCollection.find(query);
+      const result = await cursor.toArray();
       res.send(result);
     })
 
