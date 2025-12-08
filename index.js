@@ -126,6 +126,23 @@ async function run() {
       const result = await loansCollection.updateOne(query, update);
       res.send(result);
     })
+    app.patch("/loans/:id", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
+      const updatedLoan = req.body;
+      const query = {_id : new ObjectId(req.params.id)};
+      const update = {
+        $set: {
+          title : updatedLoan.title,
+          description: updatedLoan.description,
+          category: updatedLoan.category,
+          interestRate: updatedLoan.interestRate,
+          maxLoanLimit: updatedLoan.maxLoanLimit,
+          emiPlans: updatedLoan.emiPlans,
+          image: updatedLoan.image
+        }
+      }
+      const result = await loansCollection.updateOne(query, update);
+      res.send(result);
+    })
     app.delete("/loans/:id", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
       const query = {_id : new ObjectId(req.params.id)};
       const result = await loansCollection.deleteOne(query);
