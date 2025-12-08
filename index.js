@@ -192,6 +192,11 @@ async function run() {
       const result = await usersCollection.updateOne(query, update);
       res.send(result);
     })
+    app.get("/users/:id", verifyFirebaseToken, async (req, res) => {
+      const query = {_id : new ObjectId(req.params.id)};
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    })
 
 
     // applications related apis
