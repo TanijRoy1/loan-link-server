@@ -105,7 +105,12 @@ async function run() {
       res.send(result);
     });
     app.get("/loans", async (req, res) => {
-      const cursor = loansCollection.find().sort({createdAt: -1});
+      const {searchText} = req.query;
+      const query = {};
+      if (searchText) {
+        query.title = { $regex: searchText, $options: "i" };
+      }
+      const cursor = loansCollection.find(query).sort({createdAt: -1});
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -204,6 +209,23 @@ async function run() {
       }
       const cursor = applicationsCollection.find(query);
       const result = await cursor.toArray();
+      res.send(result);
+    })
+    app.patch("/loan-applications/:id", verifyFirebaseToken, verifyManager, async (req, res) => {
+      const {status} = req.body;
+      const query = {_id : new ObjectId(req.params.id)};
+      const setFields = {status : status}
+
+      if (status === "approved") {
+        setFields.approvedAt = new Date();
+      } else if (status === "rejected") {
+        setFields.rejectedAt = new Date();
+      }
+
+      const update = {
+        $set : setFields
+      }
+      const result = await applicationsCollection.updateOne(query, update);
       res.send(result);
     })
 
