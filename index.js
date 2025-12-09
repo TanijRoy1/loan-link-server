@@ -3,6 +3,7 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000;
 
 const admin = require("firebase-admin");
@@ -49,6 +50,7 @@ async function run() {
     const loansCollection = loanLinkDB.collection("loans");
     const usersCollection = loanLinkDB.collection("users");
     const applicationsCollection = loanLinkDB.collection("applications");
+    const paymentsCollection = loanLinkDB.collection("payments");
 
     // middleware
     const verifyAdmin = async (req, res, next) => {
@@ -207,10 +209,13 @@ async function run() {
       res.send(result);
     })
     app.get("/loan-applications", verifyFirebaseToken, async (req, res) => {
-      const {status} = req.query;
+      const {status, email} = req.query;
       const query = {};
       if(status){
         query.status = status;
+      }
+      if (email) {
+        query.userEmail = email;
       }
       const cursor = applicationsCollection.find(query);
       const result = await cursor.toArray();
@@ -233,6 +238,95 @@ async function run() {
       const result = await applicationsCollection.updateOne(query, update);
       res.send(result);
     })
+
+
+
+    // Payment related api
+    app.post("/create-checkout-session", async (req, res) => {
+      const paymentInfo = req.body;
+      const amount = 1000;
+
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "USD",
+              unit_amount: amount,
+              product_data: {
+                name: paymentInfo.loanTitle,
+              },
+            },
+
+            quantity: 1,
+          },
+        ],
+        customer_email: paymentInfo.userEmail,
+        mode: "payment",
+        metadata: {
+          applicationId: paymentInfo.applicationId,
+          loanTitle: paymentInfo.loanTitle,
+        },
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+      });
+
+      // console.log(session);
+      res.send({ url: session.url });
+    });
+
+    app.patch("/payment-success", async (req, res) => {
+      const sessionId = req.query.session_id;
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      // console.log(" In payment success " ,session);
+      const transactionId = session.payment_intent;
+      const existQuery = { transactionId: transactionId };
+      const paymentExist = await paymentsCollection.findOne(existQuery);
+      if (paymentExist) {
+        return res.send({
+          message: "payment already exist.",
+          paymentInfo: paymentExist,
+        });
+      }
+
+      
+
+      if (session.payment_status === "paid") {
+        const id = session.metadata.applicationId;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            applicationFeeStatus: "paid",
+            status: "pending"
+          },
+        };
+        const result = await applicationsCollection.updateOne(query, update);
+
+        // console.log(session);
+        const payment = {
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          borrowerEmail: session.customer_email,
+          applicationId: session.metadata.applicationId,
+          loanTitle: session.metadata.loanTitle,
+          transactionId: session.payment_intent,
+          paymentStatus: session.payment_status,
+          paidAt: new Date(),
+        };
+
+        const resultPayment = await paymentsCollection.insertOne(payment);
+
+
+        return res.send({
+          success: true,
+          modifiedParcel: result,
+          paymentInfo: payment,
+          trackingId: trackingId,
+          transactionId: session.payment_intent,
+        });
+      }
+
+      return res.send({ success: false });
+    });
 
 
 
