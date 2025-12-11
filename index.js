@@ -86,7 +86,11 @@ async function run() {
       const email = req.decoded_email;
       const query = { email };
       const user = await usersCollection.findOne(query);
-      if (user?.role === "borrower" || user?.status === "pending" || user?.status === "suspended") {
+      if (
+        user?.role === "borrower" ||
+        user?.status === "pending" ||
+        user?.status === "suspended"
+      ) {
         return res.status(403).send({ message: "Forbidden Access" });
       }
       next();
@@ -108,12 +112,12 @@ async function run() {
       res.send(result);
     });
     app.get("/loans", async (req, res) => {
-      const {searchText} = req.query;
+      const { searchText } = req.query;
       const query = {};
       if (searchText) {
         query.title = { $regex: searchText, $options: "i" };
       }
-      const cursor = loansCollection.find(query).sort({createdAt: -1});
+      const cursor = loansCollection.find(query).sort({ createdAt: -1 });
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -123,39 +127,54 @@ async function run() {
       const result = await loansCollection.findOne(query);
       res.send(result);
     });
-    app.patch("/loans/:id/show-on-home", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
-      const updatedLoan = req.body;
-      const query = {_id : new ObjectId(req.params.id)};
-      const update = {
-        $set: {
-          showOnHome: updatedLoan.showOnHome
-        }
+    app.patch(
+      "/loans/:id/show-on-home",
+      verifyFirebaseToken,
+      verifyNotBorrower,
+      async (req, res) => {
+        const updatedLoan = req.body;
+        const query = { _id: new ObjectId(req.params.id) };
+        const update = {
+          $set: {
+            showOnHome: updatedLoan.showOnHome,
+          },
+        };
+        const result = await loansCollection.updateOne(query, update);
+        res.send(result);
       }
-      const result = await loansCollection.updateOne(query, update);
-      res.send(result);
-    })
-    app.patch("/loans/:id", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
-      const updatedLoan = req.body;
-      const query = {_id : new ObjectId(req.params.id)};
-      const update = {
-        $set: {
-          title : updatedLoan.title,
-          description: updatedLoan.description,
-          category: updatedLoan.category,
-          interestRate: updatedLoan.interestRate,
-          maxLoanLimit: updatedLoan.maxLoanLimit,
-          emiPlans: updatedLoan.emiPlans,
-          image: updatedLoan.image
-        }
+    );
+    app.patch(
+      "/loans/:id",
+      verifyFirebaseToken,
+      verifyNotBorrower,
+      async (req, res) => {
+        const updatedLoan = req.body;
+        const query = { _id: new ObjectId(req.params.id) };
+        const update = {
+          $set: {
+            title: updatedLoan.title,
+            description: updatedLoan.description,
+            category: updatedLoan.category,
+            interestRate: updatedLoan.interestRate,
+            maxLoanLimit: updatedLoan.maxLoanLimit,
+            emiPlans: updatedLoan.emiPlans,
+            image: updatedLoan.image,
+          },
+        };
+        const result = await loansCollection.updateOne(query, update);
+        res.send(result);
       }
-      const result = await loansCollection.updateOne(query, update);
-      res.send(result);
-    })
-    app.delete("/loans/:id", verifyFirebaseToken, verifyNotBorrower, async (req, res) => {
-      const query = {_id : new ObjectId(req.params.id)};
-      const result = await loansCollection.deleteOne(query);
-      res.send(result);
-    })
+    );
+    app.delete(
+      "/loans/:id",
+      verifyFirebaseToken,
+      verifyNotBorrower,
+      async (req, res) => {
+        const query = { _id: new ObjectId(req.params.id) };
+        const result = await loansCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
 
     // user related apis
     app.post("/users", async (req, res) => {
@@ -171,14 +190,14 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
-    app.get("/users/:email/role",verifyFirebaseToken, async (req, res) => {
+    app.get("/users/:email/role", verifyFirebaseToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const result = await usersCollection.findOne(query);
       res.send(result);
     });
     app.get("/users", async (req, res) => {
-      const { limit = 0, skip = 0, searchText = "",role = "" } = req.query;
+      const { limit = 0, skip = 0, searchText = "", role = "" } = req.query;
 
       const query = {};
       if (searchText) {
@@ -191,42 +210,54 @@ async function run() {
         query.role = role;
       }
 
-      const cursor = usersCollection.find(query).limit(Number(limit)).skip(Number(skip));
+      const cursor = usersCollection
+        .find(query)
+        .limit(Number(limit))
+        .skip(Number(skip));
       const count = await usersCollection.countDocuments(query);
       const users = await cursor.toArray();
-      res.send({users, count});
-    })
-    app.patch("/users/:id", verifyFirebaseToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const updatedUser = req.body;
-      const query = {_id: new ObjectId(id)};
-      const update = {
-        $set: {
-          role : updatedUser.role,
-          status: updatedUser.status
-        }
+      res.send({ users, count });
+    });
+    app.patch(
+      "/users/:id",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const updatedUser = req.body;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            role: updatedUser.role,
+            status: updatedUser.status,
+          },
+        };
+        const result = await usersCollection.updateOne(query, update);
+        res.send(result);
       }
-      const result = await usersCollection.updateOne(query, update);
-      res.send(result);
-    })
+    );
     app.get("/users/:id", verifyFirebaseToken, async (req, res) => {
-      const query = {_id : new ObjectId(req.params.id)};
+      const query = { _id: new ObjectId(req.params.id) };
       const result = await usersCollection.findOne(query);
       res.send(result);
-    })
-
+    });
 
     // applications related apis
-    app.post("/loan-applications", verifyFirebaseToken, verifyBorrower, async (req, res) => {
-      const application = req.body;
-      application.createdAt = new Date();
-      const result = await applicationsCollection.insertOne(application);
-      res.send(result);
-    })
+    app.post(
+      "/loan-applications",
+      verifyFirebaseToken,
+      verifyBorrower,
+      async (req, res) => {
+        const application = req.body;
+        application.createdAt = new Date();
+        const result = await applicationsCollection.insertOne(application);
+        res.send(result);
+      }
+    );
     app.get("/loan-applications", verifyFirebaseToken, async (req, res) => {
-      const {status, email} = req.query;
+      const { status, email } = req.query;
       const query = {};
-      if(status){
+      if (status) {
         query.status = status;
       }
       if (email) {
@@ -235,30 +266,34 @@ async function run() {
       const cursor = applicationsCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
-    })
-    app.patch("/loan-applications/:id", verifyFirebaseToken, async (req, res) => {
-      const {status} = req.body;
-      const query = {_id : new ObjectId(req.params.id)};
-      const setFields = {status : status}
+    });
+    app.patch(
+      "/loan-applications/:id",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const { status } = req.body;
+        const query = { _id: new ObjectId(req.params.id) };
+        const setFields = { status: status };
 
-      if (status === "approved") {
-        setFields.approvedAt = new Date();
-      } else if (status === "rejected") {
-        setFields.rejectedAt = new Date();
-      } else if (status === "applied") {
-        setFields.applicationFeeStatus = "unpaid";
-        const paymentQuery = {applicationId: req.params.id};
-        const paymentResult = await paymentsCollection.deleteOne(paymentQuery);
+        if (status === "approved") {
+          setFields.approvedAt = new Date();
+        } else if (status === "rejected") {
+          setFields.rejectedAt = new Date();
+        } else if (status === "applied") {
+          setFields.applicationFeeStatus = "unpaid";
+          const paymentQuery = { applicationId: req.params.id };
+          const paymentResult = await paymentsCollection.deleteOne(
+            paymentQuery
+          );
+        }
+
+        const update = {
+          $set: setFields,
+        };
+        const result = await applicationsCollection.updateOne(query, update);
+        res.send(result);
       }
-
-      const update = {
-        $set : setFields
-      }
-      const result = await applicationsCollection.updateOne(query, update);
-      res.send(result);
-    })
-
-
+    );
 
     // Payment related api
     app.post("/create-checkout-session", async (req, res) => {
@@ -307,15 +342,13 @@ async function run() {
         });
       }
 
-      
-
       if (session.payment_status === "paid") {
         const id = session.metadata.applicationId;
         const query = { _id: new ObjectId(id) };
         const update = {
           $set: {
             applicationFeeStatus: "paid",
-            status: "pending"
+            status: "pending",
           },
         };
         const result = await applicationsCollection.updateOne(query, update);
@@ -333,7 +366,6 @@ async function run() {
 
         const resultPayment = await paymentsCollection.insertOne(payment);
 
-
         return res.send({
           success: true,
           modifiedApplication: result,
@@ -345,31 +377,67 @@ async function run() {
       return res.send({ success: false });
     });
 
-
     // aggregation pipelines
     app.get("/applications/stats/status", async (req, res) => {
-      const pipeline = [
-        {$group : {_id : "$status", count: {$sum: 1}}}
-      ]
+      const pipeline = [{ $group: { _id: "$status", count: { $sum: 1 } } }];
 
-      const applications = await applicationsCollection.aggregate(pipeline).toArray();
+      const applications = await applicationsCollection
+        .aggregate(pipeline)
+        .toArray();
       const totalCount = await applicationsCollection.countDocuments();
-      res.send({applications, totalCount});
-    })
+      res.send({ applications, totalCount });
+    });
     app.get("/applications/stats/amounts", async (req, res) => {
       const pipeline = [
-        {$match : {status : "approved"}},
-        {$group: {_id: "$status", totalApprovedAmount: {$sum: "$loanAmount"}}}
+        { $match: { status: "approved" } },
+        {
+          $group: {
+            _id: "$status",
+            totalApprovedAmount: { $sum: "$loanAmount" },
+          },
+        },
+      ];
+      const result = await applicationsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+    app.get("/users-stats/role", async (req, res) => {
+      const pipeline = [
+        { $match: { status: "approved" } },
+        { $group: { _id: "$role", count: { $sum: 1 } } },
+      ];
+      const result = await usersCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
+    app.get("/applications/stats/top-categories", async (req, res) => {
+      const pipeline = [
+        { $group: { _id: "$loanCategory", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $project: { category: "$_id", count: 1, _id: 0 } },
+        { $limit: 5 },
+      ];
+      const result = await applicationsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+    app.get("/applications/stats/borrower", async (req, res) => {
+      const {email} = req.query;
+
+      const pipeline = [
+        {$match : {userEmail: email, status: "approved"}},
+        {$group: {_id: "$status",totalAmount: { $sum: "$loanAmount" }, count: { $sum: 1 } }},
+        {$project: {totalAmount: 1, _id: 0, count : 1}}
       ]
       const result = await applicationsCollection.aggregate(pipeline).toArray();
       res.send(result);
     })
-    app.get("/users-stats/role", async (req, res) => {
-      const pipeline = [
-        {$match : {status: "approved"}},
-        {$group: {_id: "$role", count: {$sum : 1} }}
-      ]
-      const result = await usersCollection.aggregate(pipeline).toArray();
+    app.get("/payments", async (req, res) => {
+      const {email} = req.query;
+      const query = {};
+      if (email) {
+        query.borrowerEmail = email;
+      }
+      const cursor = paymentsCollection.find(query).sort({paidAt: -1}).limit(8);
+      const result = await cursor.toArray();
       res.send(result);
     })
 
@@ -378,9 +446,7 @@ async function run() {
       const message = req.body;
       const result = await messagesCollection.insertOne(message);
       res.send(result);
-    })
-
-
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
