@@ -345,6 +345,34 @@ async function run() {
       return res.send({ success: false });
     });
 
+
+    // aggregation pipelines
+    app.get("/applications/stats/status", async (req, res) => {
+      const pipeline = [
+        {$group : {_id : "$status", count: {$sum: 1}}}
+      ]
+
+      const applications = await applicationsCollection.aggregate(pipeline).toArray();
+      const totalCount = await applicationsCollection.countDocuments();
+      res.send({applications, totalCount});
+    })
+    app.get("/applications/stats/amounts", async (req, res) => {
+      const pipeline = [
+        {$match : {status : "approved"}},
+        {$group: {_id: "$status", totalApprovedAmount: {$sum: "$loanAmount"}}}
+      ]
+      const result = await applicationsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    })
+    app.get("/users-stats/role", async (req, res) => {
+      const pipeline = [
+        {$match : {status: "approved"}},
+        {$group: {_id: "$role", count: {$sum : 1} }}
+      ]
+      const result = await usersCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    })
+
     // message related api
     app.post("/messages", async (req, res) => {
       const message = req.body;
