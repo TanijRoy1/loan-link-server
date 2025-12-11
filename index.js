@@ -178,9 +178,21 @@ async function run() {
       res.send(result);
     });
     app.get("/users", async (req, res) => {
-      const { limit = 0, skip = 0 } = req.query;
-      const cursor = usersCollection.find().limit(Number(limit)).skip(Number(skip));
-      const count = await usersCollection.countDocuments();
+      const { limit = 0, skip = 0, searchText = "",role = "" } = req.query;
+
+      const query = {};
+      if (searchText) {
+        query.$or = [
+          { displayName: { $regex: searchText, $options: "i" } },
+          { email: { $regex: searchText, $options: "i" } },
+        ];
+      }
+      if (role) {
+        query.role = role;
+      }
+
+      const cursor = usersCollection.find(query).limit(Number(limit)).skip(Number(skip));
+      const count = await usersCollection.countDocuments(query);
       const users = await cursor.toArray();
       res.send({users, count});
     })
