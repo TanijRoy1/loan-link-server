@@ -51,6 +51,7 @@ async function run() {
     const usersCollection = loanLinkDB.collection("users");
     const applicationsCollection = loanLinkDB.collection("applications");
     const paymentsCollection = loanLinkDB.collection("payments");
+    const messagesCollection = loanLinkDB.collection("messages");
 
     // middleware
     const verifyAdmin = async (req, res, next) => {
@@ -177,9 +178,11 @@ async function run() {
       res.send(result);
     });
     app.get("/users", async (req, res) => {
-      const cursor = usersCollection.find();
-      const result = await cursor.toArray();
-      res.send(result);
+      const { limit = 0, skip = 0 } = req.query;
+      const cursor = usersCollection.find().limit(Number(limit)).skip(Number(skip));
+      const count = await usersCollection.countDocuments();
+      const users = await cursor.toArray();
+      res.send({users, count});
     })
     app.patch("/users/:id", verifyFirebaseToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
@@ -221,7 +224,7 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     })
-    app.patch("/loan-applications/:id", verifyFirebaseToken, verifyManager, async (req, res) => {
+    app.patch("/loan-applications/:id", verifyFirebaseToken, async (req, res) => {
       const {status} = req.body;
       const query = {_id : new ObjectId(req.params.id)};
       const setFields = {status : status}
@@ -230,6 +233,10 @@ async function run() {
         setFields.approvedAt = new Date();
       } else if (status === "rejected") {
         setFields.rejectedAt = new Date();
+      } else if (status === "applied") {
+        setFields.applicationFeeStatus = "unpaid";
+        const paymentQuery = {applicationId: req.params.id};
+        const paymentResult = await paymentsCollection.deleteOne(paymentQuery);
       }
 
       const update = {
@@ -301,7 +308,6 @@ async function run() {
         };
         const result = await applicationsCollection.updateOne(query, update);
 
-        // console.log(session);
         const payment = {
           amount: session.amount_total / 100,
           currency: session.currency,
@@ -318,15 +324,21 @@ async function run() {
 
         return res.send({
           success: true,
-          modifiedParcel: result,
+          modifiedApplication: result,
           paymentInfo: payment,
-          trackingId: trackingId,
           transactionId: session.payment_intent,
         });
       }
 
       return res.send({ success: false });
     });
+
+    // message related api
+    app.post("/messages", async (req, res) => {
+      const message = req.body;
+      const result = await messagesCollection.insertOne(message);
+      res.send(result);
+    })
 
 
 
