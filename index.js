@@ -8,7 +8,9 @@ const port = process.env.PORT || 3000;
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./loanlink-firebase-adminsdk.json");
+// const serviceAccount = require("./loanlink-firebase-adminsdk.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -44,7 +46,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const loanLinkDB = client.db("loanLinkDB");
     const loansCollection = loanLinkDB.collection("loans");
@@ -255,7 +257,7 @@ async function run() {
       }
     );
     app.get("/loan-applications", verifyFirebaseToken, async (req, res) => {
-      const { status, email } = req.query;
+      const { status, email, limit = 0, skip = 0 } = req.query;
       const query = {};
       if (status) {
         query.status = status;
@@ -263,9 +265,14 @@ async function run() {
       if (email) {
         query.userEmail = email;
       }
-      const cursor = applicationsCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
+      const cursor = applicationsCollection
+        .find(query)
+        .limit(Number(limit))
+        .skip(Number(skip))
+        .sort({ createdAt: -1 });
+      const applications = await cursor.toArray();
+      const count = await applicationsCollection.countDocuments(query);
+      res.send({ applications, count });
     });
     app.patch(
       "/loan-applications/:id",
@@ -378,68 +385,104 @@ async function run() {
     });
 
     // aggregation pipelines
-    app.get("/applications/stats/status", async (req, res) => {
-      const pipeline = [{ $group: { _id: "$status", count: { $sum: 1 } } }];
+    app.get(
+      "/applications/stats/status",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const pipeline = [{ $group: { _id: "$status", count: { $sum: 1 } } }];
 
-      const applications = await applicationsCollection
-        .aggregate(pipeline)
-        .toArray();
-      const totalCount = await applicationsCollection.countDocuments();
-      res.send({ applications, totalCount });
-    });
-    app.get("/applications/stats/amounts", async (req, res) => {
-      const pipeline = [
-        { $match: { status: "approved" } },
-        {
-          $group: {
-            _id: "$status",
-            totalApprovedAmount: { $sum: "$loanAmount" },
+        const applications = await applicationsCollection
+          .aggregate(pipeline)
+          .toArray();
+        const totalCount = await applicationsCollection.countDocuments();
+        res.send({ applications, totalCount });
+      }
+    );
+    app.get(
+      "/applications/stats/amounts",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const pipeline = [
+          { $match: { status: "approved" } },
+          {
+            $group: {
+              _id: "$status",
+              totalApprovedAmount: { $sum: "$loanAmount" },
+            },
           },
-        },
-      ];
-      const result = await applicationsCollection.aggregate(pipeline).toArray();
-      res.send(result);
-    });
-    app.get("/users-stats/role", async (req, res) => {
-      const pipeline = [
-        { $match: { status: "approved" } },
-        { $group: { _id: "$role", count: { $sum: 1 } } },
-      ];
-      const result = await usersCollection.aggregate(pipeline).toArray();
-      res.send(result);
-    });
+        ];
+        const result = await applicationsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(result);
+      }
+    );
+    app.get(
+      "/users-stats/role",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const pipeline = [
+          { $match: { status: "approved" } },
+          { $group: { _id: "$role", count: { $sum: 1 } } },
+        ];
+        const result = await usersCollection.aggregate(pipeline).toArray();
+        res.send(result);
+      }
+    );
 
-    app.get("/applications/stats/top-categories", async (req, res) => {
-      const pipeline = [
-        { $group: { _id: "$loanCategory", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $project: { category: "$_id", count: 1, _id: 0 } },
-        { $limit: 5 },
-      ];
-      const result = await applicationsCollection.aggregate(pipeline).toArray();
-      res.send(result);
-    });
-    app.get("/applications/stats/borrower", async (req, res) => {
-      const {email} = req.query;
+    app.get(
+      "/applications/stats/top-categories",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const pipeline = [
+          { $group: { _id: "$loanCategory", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $project: { category: "$_id", count: 1, _id: 0 } },
+          { $limit: 5 },
+        ];
+        const result = await applicationsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(result);
+      }
+    );
+    app.get(
+      "/applications/stats/borrower",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const { email } = req.query;
 
-      const pipeline = [
-        {$match : {userEmail: email, status: "approved"}},
-        {$group: {_id: "$status",totalAmount: { $sum: "$loanAmount" }, count: { $sum: 1 } }},
-        {$project: {totalAmount: 1, _id: 0, count : 1}}
-      ]
-      const result = await applicationsCollection.aggregate(pipeline).toArray();
-      res.send(result);
-    })
-    app.get("/payments", async (req, res) => {
-      const {email} = req.query;
+        const pipeline = [
+          { $match: { userEmail: email, status: "approved" } },
+          {
+            $group: {
+              _id: "$status",
+              totalAmount: { $sum: "$loanAmount" },
+              count: { $sum: 1 },
+            },
+          },
+          { $project: { totalAmount: 1, _id: 0, count: 1 } },
+        ];
+        const result = await applicationsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(result);
+      }
+    );
+    app.get("/payments", verifyFirebaseToken, async (req, res) => {
+      const { email } = req.query;
       const query = {};
       if (email) {
         query.borrowerEmail = email;
       }
-      const cursor = paymentsCollection.find(query).sort({paidAt: -1}).limit(8);
+      const cursor = paymentsCollection
+        .find(query)
+        .sort({ paidAt: -1 })
+        .limit(8);
       const result = await cursor.toArray();
       res.send(result);
-    })
+    });
 
     // message related api
     app.post("/messages", async (req, res) => {
@@ -449,7 +492,7 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
