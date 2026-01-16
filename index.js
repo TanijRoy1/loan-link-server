@@ -9,7 +9,9 @@ const port = process.env.PORT || 3000;
 const admin = require("firebase-admin");
 
 // const serviceAccount = require("./loanlink-firebase-adminsdk.json");
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
@@ -108,22 +110,49 @@ async function run() {
     app.get("/available-loans", async (req, res) => {
       const cursor = loansCollection
         .find({ showOnHome: true })
-        .limit(6)
+        .limit(8)
         .sort({ createdAt: -1 });
       const result = await cursor.toArray();
       res.send(result);
     });
     app.get("/loans", async (req, res) => {
-      const { searchText } = req.query;
+      const {
+        limit = 0,
+        skip = 0,
+        searchText = "",
+        category = "",
+        sortBy = "latest",
+      } = req.query;
+
       const query = {};
       if (searchText) {
         query.title = { $regex: searchText, $options: "i" };
       }
-      const cursor = loansCollection.find(query).sort({ createdAt: -1 });
-      const result = await cursor.toArray();
-      res.send(result);
+      if (category) {
+        query.category = category;
+      }
+
+      let sortQuery = { createdAt: -1 };
+      if (sortBy === "interestLow") {
+        sortQuery = { interestRate: 1 };
+      } else if (sortBy === "interestHigh") {
+        sortQuery = { interestRate: -1 };
+      } else if (sortBy === "limitHigh") {
+        sortQuery = { maxLoanLimit: -1 };
+      } else if (sortBy === "limitLow") {
+        sortQuery = { maxLoanLimit: 1 };
+      }
+
+      const cursor = loansCollection
+        .find(query)
+        .sort(sortQuery)
+        .limit(Number(limit))
+        .skip(Number(skip));
+      const count = await loansCollection.countDocuments(query);
+      const loans = await cursor.toArray();
+      res.send({ loans, count });
     });
-    app.get("/loans/:id", verifyFirebaseToken, async (req, res) => {
+    app.get("/loans/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await loansCollection.findOne(query);
