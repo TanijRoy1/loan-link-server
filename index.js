@@ -267,6 +267,23 @@ async function run() {
         res.send(result);
       }
     );
+    app.patch(
+      "/users-upate/:id",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const id = req.params.id;
+        const updatedUser = req.body;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            displayName: updatedUser.displayName,
+            photoURL: updatedUser.photoURL,
+          },
+        };
+        const result = await usersCollection.updateOne(query, update);
+        res.send(result);
+      }
+    );
     app.get("/users/:id", verifyFirebaseToken, async (req, res) => {
       const query = { _id: new ObjectId(req.params.id) };
       const result = await usersCollection.findOne(query);
