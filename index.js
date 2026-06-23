@@ -91,6 +91,18 @@ async function run() {
         // 5. Call AI service
         const aiResponse = await generateAIReport(payload);
 
+        // Store AI Report metadata in mongo
+        await applicationsCollection.updateOne(
+          { loanId: loanId },
+          {
+            $set: {
+              aiReportId: aiResponse.data.id,
+              aiReportGenerated: true,
+              aiGeneratedAt: new Date(),
+            },
+          },
+        );
+
         // 6. Return clean response
         return res.status(200).send({
           success: true,
