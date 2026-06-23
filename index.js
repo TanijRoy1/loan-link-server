@@ -42,14 +42,52 @@ const generateAIReport = async (loanData) => {
     const response = await axios.post(
       `${process.env.AI_SERVICE_URL}/api/reports`,
       loanData,
+      {
+        timeout: 15000, // IMPORTANT
+      },
     );
 
     return response.data;
   } catch (error) {
-    console.error("AI Service Error:", error.response?.data || error.message);
+    console.error("AI Service Error:", {
+      message: error.message,
+      status: error.response?.status,
+    });
 
-    throw new Error("AI report generation failed");
+    throw new Error("AI service unavailable");
   }
+};
+const validateAIRequest = (application) => {
+  if (!application) {
+    throw new Error("Application not found");
+  }
+
+  if (!application.monthlyIncome || !application.loanAmount) {
+    throw new Error("Missing financial data");
+  }
+
+  if (!application.firstName || !application.lastName) {
+    throw new Error("Missing applicant name");
+  }
+
+  return true;
+};
+const buildAIPayload = (application, user, loan) => {
+  return {
+    loanId: application.loanId,
+    userId: user?._id?.toString(),
+
+    applicantName: `${application.firstName} ${application.lastName}`,
+
+    monthlyIncome: Number(application.monthlyIncome),
+    loanAmount: Number(application.loanAmount),
+
+    duration: application.selectedEmiPlan
+      ? parseInt(application.selectedEmiPlan)
+      : 12,
+
+    purpose: application.reason || "Not specified",
+  };
 };
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.z1gnsog.mongodb.net/?appName=Cluster0`;
@@ -84,12 +122,7 @@ async function run() {
           loanId: loanId,
         });
 
-        if (!application) {
-          return res.status(404).send({
-            success: false,
-            message: "Application not found",
-          });
-        }
+        validateAIRequest(application);
 
         // 2. Find user
         const user = await usersCollection.findOne({
@@ -102,27 +135,19 @@ async function run() {
         });
 
         // 4. Build AI payload
-        const payload = {
-          loanId: loanId,
-          userId: user?._id?.toString(),
-
-          applicantName: `${application.firstName} ${application.lastName}`,
-          monthlyIncome: application.monthlyIncome,
-          loanAmount: application.loanAmount,
-          duration: 12,
-          purpose: application.reason,
-        };
+        const payload = buildAIPayload(application, user, loan);
 
         // 5. Call AI service
-        const reportResult = await generateAIReport(payload);
+        const aiResponse = await generateAIReport(payload);
 
-        res.status(200).send({
+        // 6. Return clean response
+        return res.status(200).send({
           success: true,
           message: "AI report generated successfully",
-          data: reportResult.data,
+          data: aiResponse.data,
         });
       } catch (error) {
-        console.error(error);
+        console.error("AI PIPELINE ERROR:", error.message);
 
         res.status(500).send({
           success: false,
