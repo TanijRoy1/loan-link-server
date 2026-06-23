@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const axios = require("axios");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const app = express();
@@ -10,7 +11,7 @@ const admin = require("firebase-admin");
 
 // const serviceAccount = require("./loanlink-firebase-adminsdk.json");
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
-  "utf8"
+  "utf8",
 );
 const serviceAccount = JSON.parse(decoded);
 
@@ -35,6 +36,22 @@ const verifyFirebaseToken = async (req, res, next) => {
   }
 };
 
+// helper functions for generate AI Report
+const generateAIReport = async (loanData) => {
+  try {
+    const response = await axios.post(
+      `${process.env.AI_SERVICE_URL}/api/reports`,
+      loanData,
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error("AI Service Error:", error.response?.data || error.message);
+
+    throw new Error("AI report generation failed");
+  }
+};
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.z1gnsog.mongodb.net/?appName=Cluster0`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -56,6 +73,28 @@ async function run() {
     const applicationsCollection = loanLinkDB.collection("applications");
     const paymentsCollection = loanLinkDB.collection("payments");
     const messagesCollection = loanLinkDB.collection("messages");
+
+    // test api for generate AI report
+    app.post("/test-ai-report", async (req, res) => {
+      try {
+        const result = await generateAIReport({
+          loanId: "loan123",
+          userId: "user456",
+          applicantName: "John Doe",
+          monthlyIncome: 50000,
+          loanAmount: 300000,
+          duration: 24,
+          purpose: "Business Expansion",
+        });
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
+    });
 
     // middleware
     const verifyAdmin = async (req, res, next) => {
@@ -172,7 +211,7 @@ async function run() {
         };
         const result = await loansCollection.updateOne(query, update);
         res.send(result);
-      }
+      },
     );
     app.patch(
       "/loans/:id",
@@ -194,7 +233,7 @@ async function run() {
         };
         const result = await loansCollection.updateOne(query, update);
         res.send(result);
-      }
+      },
     );
     app.delete(
       "/loans/:id",
@@ -204,7 +243,7 @@ async function run() {
         const query = { _id: new ObjectId(req.params.id) };
         const result = await loansCollection.deleteOne(query);
         res.send(result);
-      }
+      },
     );
 
     // user related apis
@@ -265,25 +304,21 @@ async function run() {
         };
         const result = await usersCollection.updateOne(query, update);
         res.send(result);
-      }
+      },
     );
-    app.patch(
-      "/users-upate/:id",
-      verifyFirebaseToken,
-      async (req, res) => {
-        const id = req.params.id;
-        const updatedUser = req.body;
-        const query = { _id: new ObjectId(id) };
-        const update = {
-          $set: {
-            displayName: updatedUser.displayName,
-            photoURL: updatedUser.photoURL,
-          },
-        };
-        const result = await usersCollection.updateOne(query, update);
-        res.send(result);
-      }
-    );
+    app.patch("/users-upate/:id", verifyFirebaseToken, async (req, res) => {
+      const id = req.params.id;
+      const updatedUser = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: {
+          displayName: updatedUser.displayName,
+          photoURL: updatedUser.photoURL,
+        },
+      };
+      const result = await usersCollection.updateOne(query, update);
+      res.send(result);
+    });
     app.get("/users/:id", verifyFirebaseToken, async (req, res) => {
       const query = { _id: new ObjectId(req.params.id) };
       const result = await usersCollection.findOne(query);
@@ -300,7 +335,7 @@ async function run() {
         application.createdAt = new Date();
         const result = await applicationsCollection.insertOne(application);
         res.send(result);
-      }
+      },
     );
     app.get("/loan-applications", verifyFirebaseToken, async (req, res) => {
       const { status, email, limit = 0, skip = 0 } = req.query;
@@ -335,9 +370,8 @@ async function run() {
         } else if (status === "applied") {
           setFields.applicationFeeStatus = "unpaid";
           const paymentQuery = { applicationId: req.params.id };
-          const paymentResult = await paymentsCollection.deleteOne(
-            paymentQuery
-          );
+          const paymentResult =
+            await paymentsCollection.deleteOne(paymentQuery);
         }
 
         const update = {
@@ -345,7 +379,7 @@ async function run() {
         };
         const result = await applicationsCollection.updateOne(query, update);
         res.send(result);
-      }
+      },
     );
 
     // Payment related api
@@ -442,7 +476,7 @@ async function run() {
           .toArray();
         const totalCount = await applicationsCollection.countDocuments();
         res.send({ applications, totalCount });
-      }
+      },
     );
     app.get(
       "/applications/stats/amounts",
@@ -461,7 +495,7 @@ async function run() {
           .aggregate(pipeline)
           .toArray();
         res.send(result);
-      }
+      },
     );
     app.get(
       "/users-stats/role",
@@ -474,7 +508,7 @@ async function run() {
         ];
         const result = await usersCollection.aggregate(pipeline).toArray();
         res.send(result);
-      }
+      },
     );
 
     app.get(
@@ -491,7 +525,7 @@ async function run() {
           .aggregate(pipeline)
           .toArray();
         res.send(result);
-      }
+      },
     );
     app.get(
       "/applications/stats/borrower",
@@ -514,7 +548,7 @@ async function run() {
           .aggregate(pipeline)
           .toArray();
         res.send(result);
-      }
+      },
     );
     app.get("/payments", verifyFirebaseToken, async (req, res) => {
       const { email } = req.query;
@@ -540,7 +574,7 @@ async function run() {
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
     console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
+      "Pinged your deployment. You successfully connected to MongoDB!",
     );
   } finally {
     // Ensures that the client will close when you finish/error
