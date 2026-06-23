@@ -74,21 +74,32 @@ async function run() {
     const paymentsCollection = loanLinkDB.collection("payments");
     const messagesCollection = loanLinkDB.collection("messages");
 
-    // test api for generate AI report
-    app.post("/test-ai-report", async (req, res) => {
+    // AI Report generation endpoint
+    app.post("/api/ai/reports/:loanId", async (req, res) => {
       try {
-        const result = await generateAIReport({
-          loanId: "loan123",
+        const { loanId } = req.params;
+
+        // Temporary payload
+        const payload = {
+          loanId,
           userId: "user456",
           applicantName: "John Doe",
           monthlyIncome: 50000,
           loanAmount: 300000,
           duration: 24,
           purpose: "Business Expansion",
-        });
+        };
 
-        res.send(result);
+        const reportResult = await generateAIReport(payload);
+
+        res.status(200).send({
+          success: true,
+          reportId: reportResult.data.id,
+          report: reportResult.data,
+        });
       } catch (error) {
+        console.error(error);
+
         res.status(500).send({
           success: false,
           message: error.message,
