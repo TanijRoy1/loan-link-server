@@ -79,23 +79,47 @@ async function run() {
       try {
         const { loanId } = req.params;
 
-        // Temporary payload
+        // 1. Find application (MAIN SOURCE)
+        const application = await applicationsCollection.findOne({
+          loanId: loanId,
+        });
+
+        if (!application) {
+          return res.status(404).send({
+            success: false,
+            message: "Application not found",
+          });
+        }
+
+        // 2. Find user
+        const user = await usersCollection.findOne({
+          email: application.userEmail,
+        });
+
+        // 3. Find loan
+        const loan = await loansCollection.findOne({
+          _id: new ObjectId(loanId),
+        });
+
+        // 4. Build AI payload
         const payload = {
-          loanId,
-          userId: "user456",
-          applicantName: "John Doe",
-          monthlyIncome: 50000,
-          loanAmount: 300000,
-          duration: 24,
-          purpose: "Business Expansion",
+          loanId: loanId,
+          userId: user?._id?.toString(),
+
+          applicantName: `${application.firstName} ${application.lastName}`,
+          monthlyIncome: application.monthlyIncome,
+          loanAmount: application.loanAmount,
+          duration: 12,
+          purpose: application.reason,
         };
 
+        // 5. Call AI service
         const reportResult = await generateAIReport(payload);
 
         res.status(200).send({
           success: true,
-          reportId: reportResult.data.id,
-          report: reportResult.data,
+          message: "AI report generated successfully",
+          data: reportResult.data,
         });
       } catch (error) {
         console.error(error);
