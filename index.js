@@ -2,6 +2,11 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const {
+  generateAIReport,
+  validateAIRequest,
+  buildAIPayload,
+} = require("./services/aiService.js");
 require("dotenv").config();
 const app = express();
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
@@ -34,60 +39,6 @@ const verifyFirebaseToken = async (req, res, next) => {
   } catch (error) {
     return res.status(401).send({ message: "Unauthorized Access" });
   }
-};
-
-// helper functions for generate AI Report
-const generateAIReport = async (loanData) => {
-  try {
-    const response = await axios.post(
-      `${process.env.AI_SERVICE_URL}/api/reports`,
-      loanData,
-      {
-        timeout: 15000, // IMPORTANT
-      },
-    );
-
-    return response.data;
-  } catch (error) {
-    console.error("AI Service Error:", {
-      message: error.message,
-      status: error.response?.status,
-    });
-
-    throw new Error("AI service unavailable");
-  }
-};
-const validateAIRequest = (application) => {
-  if (!application) {
-    throw new Error("Application not found");
-  }
-
-  if (!application.monthlyIncome || !application.loanAmount) {
-    throw new Error("Missing financial data");
-  }
-
-  if (!application.firstName || !application.lastName) {
-    throw new Error("Missing applicant name");
-  }
-
-  return true;
-};
-const buildAIPayload = (application, user, loan) => {
-  return {
-    loanId: application.loanId,
-    userId: user?._id?.toString(),
-
-    applicantName: `${application.firstName} ${application.lastName}`,
-
-    monthlyIncome: Number(application.monthlyIncome),
-    loanAmount: Number(application.loanAmount),
-
-    duration: application.selectedEmiPlan
-      ? parseInt(application.selectedEmiPlan)
-      : 12,
-
-    purpose: application.reason || "Not specified",
-  };
 };
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.z1gnsog.mongodb.net/?appName=Cluster0`;
