@@ -120,6 +120,35 @@ async function run() {
         });
       }
     });
+    // Download AI report endpoint
+    app.get("/api/ai/reports/download/:reportId", async (req, res) => {
+      try {
+        const { reportId } = req.params;
+
+        const response = await axios.get(
+          `${process.env.AI_SERVICE_URL}/api/reports/${reportId}/download`,
+          {
+            responseType: "stream",
+          },
+        );
+
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename=loan-report-${reportId}.pdf`,
+        );
+
+        res.setHeader("Content-Type", "application/pdf");
+
+        response.data.pipe(res);
+      } catch (error) {
+        console.error("DOWNLOAD ERROR:", error.message);
+
+        res.status(500).send({
+          success: false,
+          message: "Failed to download report",
+        });
+      }
+    });
 
     // middleware
     const verifyAdmin = async (req, res, next) => {
