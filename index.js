@@ -64,13 +64,13 @@ async function run() {
     const messagesCollection = loanLinkDB.collection("messages");
 
     // AI Report generation endpoint
-    app.post("/api/ai/reports/:loanId", async (req, res) => {
+    app.post("/api/ai/reports/:applicationId", async (req, res) => {
       try {
-        const { loanId } = req.params;
+        const { applicationId } = req.params;
 
         // 1. Find application (MAIN SOURCE)
         const application = await applicationsCollection.findOne({
-          loanId: loanId,
+          _id: new ObjectId(applicationId),
         });
 
         validateAIRequest(application);
@@ -82,7 +82,7 @@ async function run() {
 
         // 3. Find loan
         const loan = await loansCollection.findOne({
-          _id: new ObjectId(loanId),
+          _id: application.loanId,
         });
 
         // 4. Build AI payload
@@ -93,7 +93,9 @@ async function run() {
 
         // Store AI Report metadata in mongo
         await applicationsCollection.updateOne(
-          { loanId: loanId },
+          {
+            _id: new ObjectId(applicationId),
+          },
           {
             $set: {
               aiReportId: aiResponse.data.id,
