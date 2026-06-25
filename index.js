@@ -73,6 +73,13 @@ async function run() {
           _id: new ObjectId(applicationId),
         });
 
+        if (application.aiReportGenerated) {
+          return res.status(400).send({
+            success: false,
+            message: "AI report already generated",
+          });
+        }
+
         validateAIRequest(application);
 
         // 2. Find user
@@ -109,7 +116,7 @@ async function run() {
         return res.status(200).send({
           success: true,
           message: "AI report generated successfully",
-          aiReportId: response?.data?.id
+          data: aiResponse.data,
         });
       } catch (error) {
         console.error("AI PIPELINE ERROR:", error);
