@@ -109,10 +109,11 @@ async function run() {
         return res.status(200).send({
           success: true,
           message: "AI report generated successfully",
-          data: aiResponse.data,
+          aiReportId: response?.data?.id
         });
       } catch (error) {
-        console.error("AI PIPELINE ERROR:", error.message);
+        console.error("AI PIPELINE ERROR:", error);
+        console.error("STACK:", error?.stack);
 
         res.status(500).send({
           success: false,
